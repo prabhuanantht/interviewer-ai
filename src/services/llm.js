@@ -6,17 +6,28 @@ const SYSTEM_PROMPT_TEMPLATE = (role, difficulty) => `
 You are an expert interviewer conducting a mock interview for a ${role} position.
 The difficulty level is ${difficulty}.
 
-Your goal is to conduct a realistic, professional interview.
-1.  **Questioning**: Ask one relevant question at a time. Start with an introduction.
-2.  **Adaptability**:
-    *   If the user is **confused** or asks for help, provide a hint or rephrase the question, then gently nudge them back to the answer.
-    *   If the user is **efficient** (short answers), ask deeper follow-up questions to probe their understanding.
-    *   If the user is **chatty** or goes off-topic, politely acknowledge their point but steer the conversation back to the interview topic immediately.
-3.  **Tone**: Professional, encouraging, but objective.
-4.  **Format**: Keep your responses concise (under 3-4 sentences) to facilitate a natural voice conversation. Do NOT write long paragraphs.
-5.  **Feedback**: Do NOT provide a full evaluation during the interview. Only provide brief neutral acknowledgments (e.g., "I see," "Interesting point") before moving to the next question.
+**CORE INSTRUCTION**:
+You must function as an autonomous agent with an explicit "Observe-Reason-Act" loop.
+For every turn, you must output a JSON object containing your internal thought process and your external response.
 
-Start by introducing yourself as the AI interviewer and asking the first question (e.g., "Tell me about yourself").
+**JSON FORMAT**:
+{
+  "observation": "Analyze what the user just said (or if they stayed silent).",
+  "analysis": "Evaluate the quality of the answer. Is it correct? Vague? Off-topic?",
+  "strategy": "Decide your next move. Should you probe deeper? Move to the next topic? Give a hint?",
+  "response": "The actual spoken response to the candidate. Keep this concise (under 3-4 sentences)."
+}
+
+**BEHAVIOR GUIDELINES**:
+1.  **Questioning**: Ask one relevant question at a time.
+2.  **Adaptability**:
+    *   **Confused User**: If they ask for help, provide a hint in "response" but note the gap in "analysis".
+    *   **Efficient User**: If the answer is short/correct, use "strategy" to decide to ask a follow-up.
+    *   **Chatty User**: If off-topic, use "strategy" to steer back.
+3.  **Tone**: Professional, encouraging, but objective.
+4.  **Feedback**: Do NOT provide a full evaluation in the "response". Save that for the post-interview report.
+
+Start by introducing yourself and asking the first question.
 `;
 
 export async function generateResponse(apiKey, messages, role, difficulty) {
@@ -53,8 +64,9 @@ export async function generateResponse(apiKey, messages, role, difficulty) {
                 },
                 contents: contents,
                 generationConfig: {
-                    maxOutputTokens: 500, // Increased to prevent MAX_TOKENS error
+                    maxOutputTokens: 1000, // Increased for JSON overhead
                     temperature: 0.7,
+                    responseMimeType: "application/json" // Force JSON output
                 }
             })
         });
@@ -80,7 +92,24 @@ export async function generateResponse(apiKey, messages, role, difficulty) {
             throw new Error("Model returned an incomplete response.");
         }
 
-        return candidate.content.parts[0].text;
+        const rawText = candidate.content.parts[0].text;
+
+        try {
+            // Parse the JSON output
+            const agentOutput = JSON.parse(rawText);
+
+            // Return the full object so the UI can use the reasoning fields
+            return agentOutput;
+        } catch (e) {
+            console.error("Failed to parse Agent JSON:", rawText);
+            // Fallback if model fails to output JSON (rare with responseMimeType)
+            return {
+                observation: "Error parsing agent thought.",
+                analysis: "Model output was not valid JSON.",
+                strategy: "Fallback to raw text.",
+                response: rawText
+            };
+        }
 
     } catch (error) {
         console.error("LLM Error:", error);
@@ -92,9 +121,31 @@ export async function generateFeedback(apiKey, messages, role) {
     // Similar to above, but asks for a JSON report card.
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
+    // Filter out the internal reasoning from messages before sending to feedback generation
+    // The messages array might now contain objects or strings depending on how we store them.
+    // We need to ensure we only send the "content" (spoken text) to the feedback model
+    // to avoid confusing it with the JSON structure.
+
+    const cleanMessages = messages.map(m => {
+        try {
+            // If the content is a JSON string (from previous turns), parse it and extract 'response'
+            // However, in the context, we should probably store only the spoken text in 'messages' 
+            // OR handle the extraction here. 
+            // Let's assume 'messages' in context will store the simple text for simplicity in this function,
+            // OR we handle it if it's the full object.
+            // Actually, to keep history clean for the *next* turn of generateResponse, 
+            // we should probably store the *spoken* text in the main message history, 
+            // and store the *reasoning* separately or in a metadata field.
+            // For now, let's assume the 'content' passed here is the spoken text.
+            return m;
+        } catch (e) {
+            return m;
+        }
+    });
+
     const prompt = `
   The interview is over. Here is the transcript:
-  ${JSON.stringify(messages)}
+  ${JSON.stringify(cleanMessages)}
   
   Please evaluate the candidate for the ${role} role.
   Return a JSON object with the following structure:

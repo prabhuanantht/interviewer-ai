@@ -20,18 +20,22 @@ export function InterviewScreen() {
         }
     }, []);
 
-    const startTurn = async (assistantMessage) => {
-        // 1. Add assistant message
+    const [agentThought, setAgentThought] = useState(null);
+
+    const startTurn = async (assistantMessage, thoughtProcess = null) => {
+        // 1. Add assistant message (only the spoken part)
         if (assistantMessage) {
             dispatch({ type: 'ADD_MESSAGE', payload: { role: 'assistant', content: assistantMessage } });
+
+            // Update thought process state for visualization
+            if (thoughtProcess) {
+                setAgentThought(thoughtProcess);
+            }
 
             // 2. Speak it
             dispatch({ type: 'SET_SPEAKING', payload: true });
             voiceService.speak(assistantMessage, () => {
                 dispatch({ type: 'SET_SPEAKING', payload: false });
-                // Auto-start listening after speaking? 
-                // Let's make it manual for better UX control initially, or auto if preferred.
-                // For now, manual toggle is safer for "Confused User" scenarios.
             });
         }
     };
@@ -42,16 +46,16 @@ export function InterviewScreen() {
         setIsProcessing(true);
 
         try {
-            // 2. Get LLM response
-            const response = await generateResponse(
+            // 2. Get LLM response (now returns a JSON object)
+            const agentOutput = await generateResponse(
                 state.userSettings.apiKey,
                 [...state.messages, { role: 'user', content: text }],
                 state.userSettings.role,
                 state.userSettings.difficulty
             );
 
-            // 3. Start next turn
-            await startTurn(response);
+            // 3. Start next turn with extracted response and reasoning
+            await startTurn(agentOutput.response, agentOutput);
         } catch (error) {
             console.error(error);
             alert("Error generating response: " + error.message);
@@ -99,6 +103,19 @@ export function InterviewScreen() {
             <div className={`glass-panel ${styles.chatArea}`}>
                 <ChatInterface messages={state.messages} />
             </div>
+
+            {agentThought && (
+                <div className={styles.thoughtPanel}>
+                    <div className={styles.thoughtHeader}>
+                        <span className={styles.thoughtLabel}>Agent Brain</span>
+                    </div>
+                    <div className={styles.thoughtContent}>
+                        <p><strong>Observation:</strong> {agentThought.observation}</p>
+                        <p><strong>Analysis:</strong> {agentThought.analysis}</p>
+                        <p><strong>Strategy:</strong> {agentThought.strategy}</p>
+                    </div>
+                </div>
+            )}
 
             <div className={styles.visualizerArea}>
                 <AudioVisualizer isRecording={state.isRecording || state.isSpeaking} />
