@@ -84,6 +84,9 @@ export function SetupScreen() {
                 <p className={styles.disclaimer}>
                     Your API key is stored locally in your browser.
                 </p>
+                <p className={styles.disclaimer}>
+                    Made by <a href="https://ananthprabhut.vercel.app" target="_blank" rel="noopener noreferrer">Ananth</a>
+                </p>
             </div>
 
             <Modal
