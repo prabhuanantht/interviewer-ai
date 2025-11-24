@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { useInterview } from '../../context/InterviewContext';
 import { Button } from '../UI/Button';
 import { Input, Select } from '../UI/Input';
+import { Modal } from '../UI/Modal';
 import styles from './SetupScreen.module.css';
-import { Mic, Settings } from 'lucide-react';
+import { Mic, Info } from 'lucide-react';
 
 export function SetupScreen() {
     const { state, dispatch } = useInterview();
     const [role, setRole] = useState(state.userSettings.role || 'Software Engineer');
     const [difficulty, setDifficulty] = useState(state.userSettings.difficulty);
     const [apiKey, setApiKey] = useState(state.userSettings.apiKey);
+    const [showApiHelp, setShowApiHelp] = useState(false);
 
     const handleStart = () => {
         if (!apiKey) {
@@ -52,13 +54,26 @@ export function SetupScreen() {
                     ]}
                 />
 
-                <Input
-                    label="Gemini API Key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    type="password"
-                />
+                <div className={styles.apiKeyInputWrapper}>
+                    <Input
+                        label={
+                            <span className={styles.labelWithIcon}>
+                                Gemini API Key
+                                <button
+                                    className={styles.infoButton}
+                                    onClick={() => setShowApiHelp(true)}
+                                    title="How to get an API Key"
+                                >
+                                    <Info size={14} />
+                                </button>
+                            </span>
+                        }
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        type="password"
+                    />
+                </div>
 
                 <div className={styles.actions}>
                     <Button onClick={handleStart} className={styles.startButton}>
@@ -70,6 +85,24 @@ export function SetupScreen() {
                     Your API key is stored locally in your browser.
                 </p>
             </div>
+
+            <Modal
+                isOpen={showApiHelp}
+                onClose={() => setShowApiHelp(false)}
+                title="How to get a Gemini API Key"
+            >
+                <ol className={styles.helpList}>
+                    <li>
+                        Go to <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener noreferrer" className={styles.link}>Google AI Studio</a>.
+                    </li>
+                    <li>Click on <strong>Create API key</strong>.</li>
+                    <li>Select <strong>Create API key in new project</strong> (or select an existing one).</li>
+                    <li>Copy the generated key and paste it here.</li>
+                </ol>
+                <div className={styles.modalNote}>
+                    <p>Note: The API is free for personal use within rate limits.</p>
+                </div>
+            </Modal>
         </div>
     );
 }
